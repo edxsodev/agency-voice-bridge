@@ -9,9 +9,9 @@ Endpoints:
 """
 import os
 import json
-import hmac
+import ipaddress
 import requests
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -26,7 +26,6 @@ from config import (
     PIPER_API_URL,
     PIPER_ADMIN_EMAIL,
     PIPER_TIMEOUT_SECONDS,
-    BRIDGE_API_KEY,
 )
 from lead_extractor import extract_and_push_lead
 from piper_client import PiperClient, PiperError
@@ -91,19 +90,19 @@ def health():
 # ---------- 2. Provisioning Endpoint ----------
 
 @app.post("/api/v1/voice-agents/provision", response_model=ProvisionVoiceAgentResponse)
-def provision_voice_agent(
-    req: ProvisionVoiceAgentRequest,
-    authorization: Optional[str] = Header(default=None),
-):
+def provision_voice_agent(req: ProvisionVoiceAgentRequest, request: Request):
     """
     Called by Sankalp's website generator after brand persona generation.
     Uses existing Piper APIs to create/update workflow and assign a DID.
     """
-    expected = f"Bearer {BRIDGE_API_KEY}" if BRIDGE_API_KEY else ""
-    if not expected:
-        raise HTTPException(status_code=503, detail="Bridge API key is not configured")
-    if not authorization or not hmac.compare_digest(authorization, expected):
-        raise HTTPException(status_code=401, detail="Invalid bridge API key")
+    client_host = request.client.host if request.client else ""
+    try:
+        is_internal = ipaddress.ip_address(client_host).is_loopback
+    except ValueError:
+        is_internal = False
+    if not is_internal:
+        raise HTTPException(status_code=403, detail="Provisioning is restricted to localhost")
+
     if not PIPER_ADMIN_EMAIL:
         raise HTTPException(status_code=503, detail="Piper admin identity is not configured")
 
