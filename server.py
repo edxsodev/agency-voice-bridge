@@ -9,8 +9,9 @@ Endpoints:
 """
 import os
 import json
+import hmac
 import requests
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -22,8 +23,13 @@ from config import (
     PUBLIC_BASE_URL,
     GROQ_API_KEY,
     DEFAULT_DID_POOL,
+    PIPER_API_URL,
+    PIPER_ADMIN_EMAIL,
+    PIPER_TIMEOUT_SECONDS,
+    BRIDGE_API_KEY,
 )
 from lead_extractor import extract_and_push_lead
+from piper_client import PiperClient, PiperError
 
 app = FastAPI(title="Agency Voice Bridge API", version="1.0.0")
 
@@ -42,17 +48,21 @@ class ProvisionVoiceAgentRequest(BaseModel):
     agency_name: str
     website: Optional[str] = None
     call_bot_prompt: Optional[str] = None
-    custom_phone: Optional[str] = None
+    callback_url: Optional[str] = None
+    callback_bearer_token: Optional[str] = None
+    first_turn_message: Optional[str] = None
+    voice_model: str = "gemini_live"
+    voice_name: str = "Aoede"
 
 
 class ProvisionVoiceAgentResponse(BaseModel):
     status: str
     agency_id: str
     agency_name: str
+    company_id: str
+    workflow_id: str
+    blueprint_id: str
     did_number: str
-    websocket_url: str
-    widget_snippet: str
-    telephony_inbound_url: str
 
 
 # ---------- Groq LLM Helper ----------
@@ -81,25 +91,54 @@ def health():
 # ---------- 2. Provisioning Endpoint ----------
 
 @app.post("/api/v1/voice-agents/provision", response_model=ProvisionVoiceAgentResponse)
-def provision_voice_agent(req: ProvisionVoiceAgentRequest):
+def provision_voice_agent(
+    req: ProvisionVoiceAgentRequest,
+    authorization: Optional[str] = Header(default=None),
+):
     """
-    Called by Sankalp's website generator when building a new agency website.
-    Allocates DID, generates widget embed snippet, and activates the AI receptionist.
+    Called by Sankalp's website generator after brand persona generation.
+    Uses existing Piper APIs to create/update workflow and assign a DID.
     """
-    did = req.custom_phone or DEFAULT_DID_POOL[0]["did"]
-    ws_url = f"ws://{PUBLIC_BASE_URL.replace('http://', '').replace('https://', '')}/ws/call/{req.agency_id}"
-    widget_snippet = f'<script src="{PUBLIC_BASE_URL}/widget.js" data-agency-id="{req.agency_id}"></script>'
-    inbound_url = f"{PUBLIC_BASE_URL}/api/telephony/inbound"
+    expected = f"Bearer {BRIDGE_API_KEY}" if BRIDGE_API_KEY else ""
+    if not expected:
+        raise HTTPException(status_code=503, detail="Bridge API key is not configured")
+    if not authorization or not hmac.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="Invalid bridge API key")
+    if not PIPER_ADMIN_EMAIL:
+        raise HTTPException(status_code=503, detail="Piper admin identity is not configured")
 
-    return {
-        "status": "active",
-        "agency_id": req.agency_id,
-        "agency_name": req.agency_name,
-        "did_number": did,
-        "websocket_url": ws_url,
-        "widget_snippet": widget_snippet,
-        "telephony_inbound_url": inbound_url,
-    }
+    agency_id = req.agency_id.strip()
+    agency_name = req.agency_name.strip()
+    prompt = (req.call_bot_prompt or "").strip()
+    if not agency_id or len(agency_id) > 128:
+        raise HTTPException(status_code=400, detail="agency_id must be 1-128 characters")
+    if not agency_name or len(agency_name) > 200:
+        raise HTTPException(status_code=400, detail="agency_name must be 1-200 characters")
+    if len(prompt) < 20 or len(prompt) > 100000:
+        raise HTTPException(status_code=400, detail="call_bot_prompt must be 20-100000 characters")
+    if req.callback_url and not req.callback_url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="callback_url must use https")
+
+    first_turn_message = (req.first_turn_message or "").strip()
+    if not first_turn_message:
+        first_turn_message = f"Hello! Thank you for calling {agency_name}. How may I help you today?"
+
+    client = PiperClient(PIPER_API_URL, PIPER_ADMIN_EMAIL, PIPER_TIMEOUT_SECONDS)
+    try:
+        return client.provision(
+            agency_id=agency_id,
+            agency_name=agency_name,
+            prompt=prompt,
+            callback_url=req.callback_url,
+            callback_bearer_token=req.callback_bearer_token,
+            first_turn_message=first_turn_message,
+            voice_model=req.voice_model,
+            voice_name=req.voice_name,
+        )
+    except PiperError as exc:
+        if exc.status_code == 404 and "no available did" in str(exc).lower():
+            raise HTTPException(status_code=409, detail="No free DID available") from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 # ---------- 3. Serve Embeddable Widget Script ----------

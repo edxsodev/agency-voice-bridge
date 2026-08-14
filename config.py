@@ -13,6 +13,12 @@ BRIDGE_HOST = os.environ.get("BRIDGE_HOST", "0.0.0.0")
 AGENCY_API_URL = os.environ.get("AGENCY_API_URL", "http://127.0.0.1:8000")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", f"http://127.0.0.1:{BRIDGE_PORT}")
 
+# Piper provisioning API (private/internal only)
+PIPER_API_URL = os.environ.get("PIPER_API_URL", "http://127.0.0.1:3101")
+PIPER_ADMIN_EMAIL = os.environ.get("PIPER_ADMIN_EMAIL", "")
+PIPER_TIMEOUT_SECONDS = float(os.environ.get("PIPER_TIMEOUT_SECONDS", "15"))
+BRIDGE_API_KEY = os.environ.get("BRIDGE_API_KEY", "")
+
 # AI Engine Keys (read from environment / .env)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
