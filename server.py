@@ -9,9 +9,8 @@ Endpoints:
 """
 import os
 import json
-import ipaddress
 import requests
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -90,19 +89,11 @@ def health():
 # ---------- 2. Provisioning Endpoint ----------
 
 @app.post("/api/v1/voice-agents/provision", response_model=ProvisionVoiceAgentResponse)
-def provision_voice_agent(req: ProvisionVoiceAgentRequest, request: Request):
+def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     """
     Called by Sankalp's website generator after brand persona generation.
     Uses existing Piper APIs to create/update workflow and assign a DID.
     """
-    client_host = request.client.host if request.client else ""
-    try:
-        is_internal = ipaddress.ip_address(client_host).is_loopback
-    except ValueError:
-        is_internal = False
-    if not is_internal:
-        raise HTTPException(status_code=403, detail="Provisioning is restricted to localhost")
-
     if not PIPER_ADMIN_EMAIL:
         raise HTTPException(status_code=503, detail="Piper admin identity is not configured")
 
