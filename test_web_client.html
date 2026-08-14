@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Texas Real Estate — AI Voice Receptionist Test</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0F172A;
+      --card: #1E293B;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --accent: #38BDF8;
+      --accent-hover: #0EA5E9;
+      --success: #34D399;
+      --danger: #F87171;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      width: 100%;
+      max-width: 680px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .badge {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .agency-select-wrap {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    select {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0F172A;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+    }
+    .call-controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    button {
+      flex: 1;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .btn-start {
+      background: var(--accent);
+      color: #0F172A;
+    }
+    .btn-start:hover { background: var(--accent-hover); }
+    .btn-end {
+      background: var(--danger);
+      color: #FFFFFF;
+      display: none;
+    }
+    .btn-end:hover { opacity: 0.9; }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #0F172A;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748B;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-dot.live { background: var(--success); box-shadow: 0 0 10px var(--success); }
+    .transcript-box {
+      height: 280px;
+      overflow-y: auto;
+      background: #0F172A;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+    .msg.bot {
+      align-self: flex-start;
+      background: #334155;
+      color: var(--text);
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 16px;
+      background: #0F172A;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    .btn-send {
+      flex: 0 0 auto;
+      padding: 12px 20px;
+      background: var(--accent);
+      color: #0F172A;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div class="badge">Isolated Voice Bridge</div>
+    <h1>Real Estate AI Voice Receptionist</h1>
+    <div class="sub">Test live voice conversations with Texas Agency brand personas</div>
+  </div>
+
+  <div class="agency-select-wrap">
+    <label for="agencySelect">Select Agency Persona</label>
+    <select id="agencySelect">
+      <option value="1">Agency 1 — Realty Texas (Round Rock)</option>
+      <option value="2">Agency 2 — Gone to Texas RE</option>
+      <option value="3">Agency 3 — TX RE Brokers (San Marcos)</option>
+      <option value="4">Agency 4 — Torrey McGraw & Keela McGraw</option>
+      <option value="5">Agency 5 — League RE (Fort Worth)</option>
+    </select>
+  </div>
+
+  <div class="call-controls">
+    <button id="startCallBtn" class="btn-start">📞 Call AI Receptionist</button>
+    <button id="endCallBtn" class="btn-end">❌ End Call & Push Lead</button>
+  </div>
+
+  <div class="status-bar">
+    <div><span id="statusDot" class="status-dot"></span> <span id="statusText">Ready to connect</span></div>
+    <div id="micStatus">Mic: Idle</div>
+  </div>
+
+  <div id="transcriptBox" class="transcript-box">
+    <div class="msg bot">Select an agency and press "Call AI Receptionist" to start speaking.</div>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="textInput" placeholder="Type here or speak into microphone..." disabled />
+    <button id="sendBtn" class="btn-send" disabled>Send</button>
+  </div>
+</div>
+
+<script>
+  let ws = null;
+  let recognition = null;
+  let isCalling = false;
+
+  const startBtn = document.getElementById("startCallBtn");
+  const endBtn = document.getElementById("endCallBtn");
+  const agencySelect = document.getElementById("agencySelect");
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const micStatus = document.getElementById("micStatus");
+  const transcriptBox = document.getElementById("transcriptBox");
+  const textInput = document.getElementById("textInput");
+  const sendBtn = document.getElementById("sendBtn");
+
+  // Web Speech API for voice synthesis
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Web Speech API for voice recognition (mic input)
+  function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      micStatus.textContent = "Mic: Web Speech API unsupported";
+      return null;
+    }
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = 'en-US';
+
+    rec.onresult = (event) => {
+      const lastResult = event.results[event.results.length - 1];
+      if (lastResult.isFinal) {
+        const transcript = lastResult[0].transcript.trim();
+        if (transcript && ws && ws.readyState === WebSocket.OPEN) {
+          addMessage("user", transcript);
+          ws.send(JSON.stringify({ type: "user_speech", text: transcript }));
+        }
+      }
+    };
+
+    rec.onstart = () => { micStatus.textContent = "Mic: Listening 🎙️"; };
+    rec.onend = () => {
+      if (isCalling) {
+        try { rec.start(); } catch(e) {}
+      } else {
+        micStatus.textContent = "Mic: Idle";
+      }
+    };
+    return rec;
+  }
+
+  function addMessage(role, text) {
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    div.textContent = text;
+    transcriptBox.appendChild(div);
+    transcriptBox.scrollTop = transcriptBox.scrollHeight;
+  }
+
+  startBtn.addEventListener("click", () => {
+    const agencyNum = agencySelect.value;
+    const wsUrl = `ws://${window.location.host}/ws/call/${agencyNum}`;
+
+    statusText.textContent = "Connecting to Voice Bridge...";
+    statusDot.className = "status-dot";
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      isCalling = true;
+      statusText.textContent = "Live Call Active";
+      statusDot.className = "status-dot live";
+      startBtn.style.display = "none";
+      endBtn.style.display = "flex";
+      textInput.disabled = false;
+      sendBtn.disabled = false;
+      agencySelect.disabled = true;
+
+      recognition = initSpeechRecognition();
+      if (recognition) {
+        try { recognition.start(); } catch(e) {}
+      }
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "bot_speech") {
+        addMessage("bot", data.text);
+        speak(data.text);
+      } else if (data.type === "call_ended") {
+        addMessage("bot", "✅ Call ended. Lead captured and saved to dashboard.");
+      }
+    };
+
+    ws.onclose = () => {
+      cleanupCall();
+    };
+  });
+
+  endBtn.addEventListener("click", () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "end_call" }));
+      setTimeout(() => ws.close(), 500);
+    }
+    cleanupCall();
+  });
+
+  function cleanupCall() {
+    isCalling = false;
+    statusText.textContent = "Call ended";
+    statusDot.className = "status-dot";
+    startBtn.style.display = "flex";
+    endBtn.style.display = "none";
+    textInput.disabled = true;
+    sendBtn.disabled = true;
+    agencySelect.disabled = false;
+    if (recognition) {
+      try { recognition.stop(); } catch(e) {}
+    }
+    window.speechSynthesis.cancel();
+  }
+
+  sendBtn.addEventListener("click", () => {
+    const text = textInput.value.trim();
+    if (text && ws && ws.readyState === WebSocket.OPEN) {
+      addMessage("user", text);
+      ws.send(JSON.stringify({ type: "user_speech", text: text }));
+      textInput.value = "";
+    }
+  });
+
+  textInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendBtn.click();
+  });
+</script>
+</body>
+</html>
