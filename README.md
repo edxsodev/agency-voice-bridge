@@ -67,15 +67,30 @@ When an automated agency builder (like Sankalp's `agency-website-maker`) generat
 
 | File | Type | Description & Purpose |
 | :--- | :--- | :--- |
-| [`server.py`](./server.py) | **Core API** | Main FastAPI application. Exposes provisioning API, serves widget script, hosts live voice WebSocket streams, and handles inbound telephony webhooks. Features automatic graceful fallback to virtual DID pool. |
+| [`server.py`](./server.py) | **Core API** | Main FastAPI application. Exposes provisioning API, auto-rotating DID pool (`/api/v1/dids/rotate`), serves widget script, hosts live voice WebSocket streams, and handles inbound telephony webhooks. |
 | [`piper_client.py`](./piper_client.py) | **Engine Client** | Connector to Piper Engine (`http://127.0.0.1:3101` / `workflow.conversely.in`). Handles automated company creation, visual workflow node graph generation (`flowPayload`), and DID pool reservation. |
 | [`widget.js`](./widget.js) | **Frontend Widget** | Standalone JavaScript widget. Injects a floating click-to-call modal on generated agency websites, manages browser mic streaming and voice synthesis. |
 | [`lead_extractor.py`](./lead_extractor.py) | **AI Agent** | Post-call LLM agent. Extracts structured caller requirements (`name`, `phone`, `budget`, `timeline`) from raw transcripts and pushes them to `POST /leads`. |
 | [`agency-provision-router.js`](./agency-provision-router.js) | **Piper Plugin** | Native Express.js drop-in router for `piper-engine` to enable native database blueprint insertion & DID assignment. |
-| [`config.py`](./config.py) | **Config** | Centralized configuration loader for ports, API keys, URLs, and default virtual DID inventory. |
+| [`config.py`](./config.py) | **Config** | Centralized configuration loader with active 5-DID real telephony pool (iCallMate). |
 | [`test_piper_client.py`](./test_piper_client.py) | **Unit Tests** | Python unit tests verifying workflow ID collision-resistance, brand prompt inclusion, and provisioning idempotency. |
 | [`test_web_client.html`](./test_web_client.html) | **Browser UI** | Standalone web test bench to simulate voice calls with Texas agency personas using your browser mic. |
 | [`simulate_call.py`](./simulate_call.py) | **CLI Test** | Automated multi-turn conversational simulator that runs scripted calls against the bridge and verifies lead capture. |
+
+---
+
+## 📞 Active Rotating DID Pool (iCallMate)
+
+| DID Number | Raw DID | Display Format | Camp ID | Lead ID | Provider |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`08037259676`** | `8037259676` | `+91 8037259676` | `64` | `1079` | `icallmate` |
+| **`08037259675`** | `8037259675` | `+91 8037259675` | `63` | `1078` | `icallmate` |
+| **`08037259674`** | `8037259674` | `+91 8037259674` | `62` | `1077` | `icallmate` |
+| **`08037259673`** | `8037259673` | `+91 8037259673` | `61` | `1076` | `icallmate` |
+| **`08037259672`** | `8037259672` | `+91 8037259672` | `65` | `1083` | `icallmate` |
+
+- **Get Full Pool**: `GET /api/v1/dids/pool`
+- **Rotate to Next DID**: `GET /api/v1/dids/rotate`
 
 ---
 

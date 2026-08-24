@@ -79,11 +79,48 @@ def _call_groq(messages: list[dict], max_tokens: int = 150) -> str:
     return data["choices"][0]["message"]["content"].strip()
 
 
+_did_rotation_counter = 0
+
+
+def get_next_rotating_did() -> dict:
+    global _did_rotation_counter
+    did_info = DEFAULT_DID_POOL[_did_rotation_counter % len(DEFAULT_DID_POOL)]
+    _did_rotation_counter += 1
+    return did_info
+
+
 # ---------- 1. Health Check ----------
 
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "agency-voice-bridge", "port": BRIDGE_PORT}
+
+
+# ---------- DID Inventory & Auto-Rotation Endpoints ----------
+
+@app.get("/api/v1/dids/pool")
+def get_did_pool():
+    """Returns the full active DID pool with Campaign ID and Lead ID mappings."""
+    return {
+        "status": "success",
+        "total": len(DEFAULT_DID_POOL),
+        "dids": DEFAULT_DID_POOL,
+    }
+
+
+@app.get("/api/v1/dids/rotate")
+def rotate_did():
+    """Rotates to the next DID in the pool and returns its details."""
+    selected = get_next_rotating_did()
+    return {
+        "status": "success",
+        "assigned_did": selected["did"],
+        "raw_did": selected["raw_did"],
+        "display_phone": selected["display_phone"],
+        "camp_id": selected["camp_id"],
+        "lead_id": selected["lead_id"],
+        "provider": selected["provider"],
+    }
 
 
 # ---------- 2. Provisioning Endpoint ----------
@@ -94,9 +131,6 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     Called by Sankalp's website generator after brand persona generation.
     Uses existing Piper APIs to create/update workflow and assign a DID.
     """
-    if not PIPER_ADMIN_EMAIL:
-        raise HTTPException(status_code=503, detail="Piper admin identity is not configured")
-
     agency_id = req.agency_id.strip()
     agency_name = req.agency_name.strip()
     prompt = (req.call_bot_prompt or "").strip()
@@ -113,31 +147,34 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     if not first_turn_message:
         first_turn_message = f"Hello! Thank you for calling {agency_name}. How may I help you today?"
 
-    client = PiperClient(PIPER_API_URL, PIPER_ADMIN_EMAIL, PIPER_TIMEOUT_SECONDS)
-    try:
-        return client.provision(
-            agency_id=agency_id,
-            agency_name=agency_name,
-            prompt=prompt,
-            callback_url=req.callback_url,
-            callback_bearer_token=req.callback_bearer_token,
-            first_turn_message=first_turn_message,
-            voice_model=req.voice_model,
-            voice_name=req.voice_name,
-        )
-    except PiperError as exc:
-        if exc.status_code == 404 and "no available did" in str(exc).lower():
-            raise HTTPException(status_code=409, detail="No free DID available") from exc
-        print(f"[provision] Piper backend unavailable ({exc}), fallback to virtual DID pool")
-        return {
-            "status": "active",
-            "agency_id": agency_id,
-            "agency_name": agency_name,
-            "company_id": "00000000-0000-0000-0000-000000000001",
-            "workflow_id": f"AGENCY_{agency_id}",
-            "blueprint_id": "00000000-0000-0000-0000-000000000002",
-            "did_number": DEFAULT_DID_POOL[0]["did"],
-        }
+    if PIPER_ADMIN_EMAIL:
+        client = PiperClient(PIPER_API_URL, PIPER_ADMIN_EMAIL, PIPER_TIMEOUT_SECONDS)
+        try:
+            return client.provision(
+                agency_id=agency_id,
+                agency_name=agency_name,
+                prompt=prompt,
+                callback_url=req.callback_url,
+                callback_bearer_token=req.callback_bearer_token,
+                first_turn_message=first_turn_message,
+                voice_model=req.voice_model,
+                voice_name=req.voice_name,
+            )
+        except PiperError as exc:
+            if exc.status_code == 404 and "no available did" in str(exc).lower():
+                raise HTTPException(status_code=409, detail="No free DID available") from exc
+            print(f"[provision] Piper backend unavailable ({exc}), fallback to rotating DID pool")
+
+    selected_did = get_next_rotating_did()
+    return {
+        "status": "active",
+        "agency_id": agency_id,
+        "agency_name": agency_name,
+        "company_id": "00000000-0000-0000-0000-000000000001",
+        "workflow_id": f"AGENCY_{agency_id}",
+        "blueprint_id": "00000000-0000-0000-0000-000000000002",
+        "did_number": selected_did["did"],
+    }
 
 
 # ---------- 3. Serve Embeddable Widget Script ----------
