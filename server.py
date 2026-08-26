@@ -45,12 +45,14 @@ class ProvisionVoiceAgentRequest(BaseModel):
     agency_id: str
     agency_name: str
     website: Optional[str] = None
+    prompt_text: Optional[str] = None
     call_bot_prompt: Optional[str] = None
     callback_url: Optional[str] = None
     callback_bearer_token: Optional[str] = None
     first_turn_message: Optional[str] = None
-    voice_model: str = "gemini_live"
-    voice_name: str = "Aoede"
+    voice_model: str = "sarvam"
+    voice_name: str = "neha"
+    voice_pace: float = 1.0
 
 
 class ProvisionVoiceAgentResponse(BaseModel):
@@ -133,13 +135,13 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     """
     agency_id = req.agency_id.strip()
     agency_name = req.agency_name.strip()
-    prompt = (req.call_bot_prompt or "").strip()
+    prompt = (req.prompt_text or req.call_bot_prompt or "").strip()
     if not agency_id or len(agency_id) > 128:
         raise HTTPException(status_code=400, detail="agency_id must be 1-128 characters")
     if not agency_name or len(agency_name) > 200:
         raise HTTPException(status_code=400, detail="agency_name must be 1-200 characters")
     if len(prompt) < 20 or len(prompt) > 100000:
-        raise HTTPException(status_code=400, detail="call_bot_prompt must be 20-100000 characters")
+        raise HTTPException(status_code=400, detail="prompt_text must be 20-100000 characters")
     if req.callback_url and not req.callback_url.startswith("https://"):
         raise HTTPException(status_code=400, detail="callback_url must use https")
 
@@ -159,6 +161,7 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
                 first_turn_message=first_turn_message,
                 voice_model=req.voice_model,
                 voice_name=req.voice_name,
+                voice_pace=req.voice_pace,
             )
         except PiperError as exc:
             if exc.status_code == 404 and "no available did" in str(exc).lower():
@@ -264,9 +267,10 @@ async def voice_call_ws(websocket: WebSocket, agency_identifier: str):
 
 @app.post("/api/telephony/inbound")
 def telephony_inbound(payload: dict):
+    agency_identifier = payload.get("agency_id") or payload.get("agency_number") or "1"
     return {
         "status": "connect",
-        "stream_url": f"ws://{PUBLIC_BASE_URL.replace('http://', '').replace('https://', '')}/ws/call/1",
+        "stream_url": f"ws://{PUBLIC_BASE_URL.replace('http://', '').replace('https://', '')}/ws/call/{agency_identifier}",
     }
 
 

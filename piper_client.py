@@ -35,6 +35,7 @@ def build_flow_payload(
     first_turn_message: str,
     voice_model: str,
     voice_name: str,
+    voice_pace: float = 1.0,
 ) -> dict:
     return {
         "nodes": [
@@ -57,7 +58,7 @@ def build_flow_payload(
                     "firstTurnMessage": first_turn_message,
                     "voiceModel": voice_model,
                     "voiceName": voice_name,
-                    "voicePace": 1.0,
+                    "voicePace": voice_pace,
                 },
             },
         ],
@@ -155,6 +156,7 @@ class PiperClient:
         first_turn_message: str,
         voice_model: str,
         voice_name: str,
+        voice_pace: float = 1.0,
     ) -> dict:
         workflow_id = build_workflow_id(agency_id)
         company = next(
@@ -182,6 +184,7 @@ class PiperClient:
             first_turn_message=first_turn_message,
             voice_model=voice_model,
             voice_name=voice_name,
+            voice_pace=voice_pace,
         )
         callback_auth_method = "bearer" if callback_bearer_token else "none"
         callback_auth_config = {"token": callback_bearer_token} if callback_bearer_token else None
