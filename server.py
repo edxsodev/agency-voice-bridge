@@ -14,7 +14,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 
 from config import (
     BRIDGE_PORT,
@@ -28,6 +28,7 @@ from config import (
 )
 from lead_extractor import extract_and_push_lead
 from piper_client import PiperClient, PiperError
+from piper_client import build_kyc_prompt
 
 app = FastAPI(title="Agency Voice Bridge API", version="1.0.0")
 
@@ -43,8 +44,9 @@ app.add_middleware(
 
 class ProvisionVoiceAgentRequest(BaseModel):
     agency_id: str
-    agency_name: str
+    agency_name: Optional[str] = None
     website: Optional[str] = None
+    kyc: Optional[dict[str, Any]] = None
     prompt_text: Optional[str] = None
     call_bot_prompt: Optional[str] = None
     callback_url: Optional[str] = None
@@ -63,6 +65,13 @@ class ProvisionVoiceAgentResponse(BaseModel):
     workflow_id: str
     blueprint_id: str
     did_number: str
+
+
+class PromptResponse(BaseModel):
+    agency_id: str
+    workflow_id: str
+    blueprint_id: str
+    prompt_text: str
 
 
 # ---------- Groq LLM Helper ----------
@@ -134,12 +143,14 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     Uses existing Piper APIs to create/update workflow and assign a DID.
     """
     agency_id = req.agency_id.strip()
-    agency_name = req.agency_name.strip()
+    agency_name = (req.agency_name or (req.kyc or {}).get("company_name") or (req.kyc or {}).get("name") or "").strip()
     prompt = (req.prompt_text or req.call_bot_prompt or "").strip()
     if not agency_id or len(agency_id) > 128:
         raise HTTPException(status_code=400, detail="agency_id must be 1-128 characters")
     if not agency_name or len(agency_name) > 200:
         raise HTTPException(status_code=400, detail="agency_name must be 1-200 characters")
+    if not prompt and req.kyc:
+        prompt = build_kyc_prompt(agency_name=agency_name, kyc=req.kyc)
     if len(prompt) < 20 or len(prompt) > 100000:
         raise HTTPException(status_code=400, detail="prompt_text must be 20-100000 characters")
     if req.callback_url and not req.callback_url.startswith("https://"):
@@ -170,6 +181,16 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
         if exc.status_code == 404 and "no available did" in str(exc).lower():
             raise HTTPException(status_code=409, detail="No free DID available") from exc
         raise HTTPException(status_code=exc.status_code, detail=f"Piper provisioning failed: {exc}") from exc
+
+
+@app.get("/api/v1/voice-agents/{agency_id}/prompt", response_model=PromptResponse)
+def get_voice_agent_prompt(agency_id: str):
+    if not PIPER_ADMIN_EMAIL:
+        raise HTTPException(status_code=503, detail="Piper provisioning is not configured")
+    try:
+        return PiperClient(PIPER_API_URL, PIPER_ADMIN_EMAIL, PIPER_TIMEOUT_SECONDS).get_prompt(agency_id.strip())
+    except PiperError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 # ---------- 3. Serve Embeddable Widget Script ----------

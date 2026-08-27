@@ -1,6 +1,6 @@
 import unittest
 
-from piper_client import PiperClient, build_flow_payload, build_workflow_id, select_pool_did
+from piper_client import PiperClient, build_flow_payload, build_kyc_prompt, build_workflow_id, select_pool_did
 
 
 class FakePiperClient(PiperClient):
@@ -88,6 +88,14 @@ class ProvisioningTests(unittest.TestCase):
             voice_name="neha",
         )
         self.assertEqual(flow["nodes"][1]["data"]["voicePace"], 1.3)
+
+    def test_kyc_prompt_contains_authoritative_company_context(self):
+        prompt = build_kyc_prompt(
+            agency_name="Acme Realty",
+            kyc={"service_area": "Austin", "phone": "+1 555 0100"},
+        )
+        self.assertIn("Acme Realty", prompt)
+        self.assertIn("Austin", prompt)
 
     def test_repeat_provision_reuses_workflow_and_did(self):
         client = FakePiperClient()

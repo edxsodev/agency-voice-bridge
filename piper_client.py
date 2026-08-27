@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 
 import requests
@@ -13,6 +14,20 @@ DEFAULT_CAPTURED_FIELDS = [
     "budget",
     "preferred_callback_time",
 ]
+
+
+def build_kyc_prompt(*, agency_name: str, kyc: dict) -> str:
+    details = json.dumps(kyc, ensure_ascii=False, indent=2, sort_keys=True)
+    return f"""You are the inbound voice receptionist for {agency_name}.
+
+Use the following company KYC as the authoritative business context:
+{details}
+
+Answer callers professionally and concisely. Collect their name, phone number,
+requirements, location, budget, and preferred callback time when relevant. Use
+only the supplied company context; never invent services, prices, availability,
+addresses, or policies. If the KYC does not answer a question, offer a callback.
+""".strip()
 
 
 class PiperError(RuntimeError):
@@ -160,6 +175,34 @@ class PiperClient:
 
     def sync_did_macro(self, did_number: str) -> None:
         self._request("POST", f"/api/dids/{did_number}/sync-macro", payload={}, admin=True)
+
+    def get_prompt(self, agency_id: str) -> dict:
+        workflow_id = build_workflow_id(agency_id)
+        company = next(
+            (item for item in self.list_companies() if item.get("externalCompanyId") == agency_id),
+            None,
+        )
+        if not company:
+            raise PiperError("Agency workflow not found", 404)
+        workflow = next(
+            (
+                item for item in self.list_blueprints(company["companyId"])
+                if item.get("triggerWorkflowId") == workflow_id
+            ),
+            None,
+        )
+        if not workflow:
+            raise PiperError("Agency workflow not found", 404)
+        voice_node = next(
+            (node for node in workflow.get("flowPayload", {}).get("nodes", []) if node.get("type") == "voiceNode"),
+            {},
+        )
+        return {
+            "agency_id": agency_id,
+            "workflow_id": workflow_id,
+            "blueprint_id": workflow["blueprintId"],
+            "prompt_text": voice_node.get("data", {}).get("voicePrompt"),
+        }
 
     def release_did(self, *, company_id: str, did_number: str) -> None:
         self._request(
