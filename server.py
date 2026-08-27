@@ -52,7 +52,7 @@ class ProvisionVoiceAgentRequest(BaseModel):
     first_turn_message: Optional[str] = None
     voice_model: str = "sarvam"
     voice_name: str = "neha"
-    voice_pace: float = 1.0
+    voice_pace: float = 1.3
 
 
 class ProvisionVoiceAgentResponse(BaseModel):
@@ -149,35 +149,27 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     if not first_turn_message:
         first_turn_message = f"Hello! Thank you for calling {agency_name}. How may I help you today?"
 
-    if PIPER_ADMIN_EMAIL:
-        client = PiperClient(PIPER_API_URL, PIPER_ADMIN_EMAIL, PIPER_TIMEOUT_SECONDS)
-        try:
-            return client.provision(
-                agency_id=agency_id,
-                agency_name=agency_name,
-                prompt=prompt,
-                callback_url=req.callback_url,
-                callback_bearer_token=req.callback_bearer_token,
-                first_turn_message=first_turn_message,
-                voice_model=req.voice_model,
+    if not PIPER_ADMIN_EMAIL:
+        raise HTTPException(status_code=503, detail="Piper provisioning is not configured")
+
+    client = PiperClient(PIPER_API_URL, PIPER_ADMIN_EMAIL, PIPER_TIMEOUT_SECONDS)
+    try:
+        return client.provision(
+            agency_id=agency_id,
+            agency_name=agency_name,
+            prompt=prompt,
+            callback_url=req.callback_url,
+            callback_bearer_token=req.callback_bearer_token,
+            first_turn_message=first_turn_message,
+            voice_model=req.voice_model,
                 voice_name=req.voice_name,
                 voice_pace=req.voice_pace,
+                did_pool=[item["did"] for item in DEFAULT_DID_POOL],
             )
-        except PiperError as exc:
-            if exc.status_code == 404 and "no available did" in str(exc).lower():
-                raise HTTPException(status_code=409, detail="No free DID available") from exc
-            print(f"[provision] Piper backend unavailable ({exc}), fallback to rotating DID pool")
-
-    selected_did = get_next_rotating_did()
-    return {
-        "status": "active",
-        "agency_id": agency_id,
-        "agency_name": agency_name,
-        "company_id": "00000000-0000-0000-0000-000000000001",
-        "workflow_id": f"AGENCY_{agency_id}",
-        "blueprint_id": "00000000-0000-0000-0000-000000000002",
-        "did_number": selected_did["did"],
-    }
+    except PiperError as exc:
+        if exc.status_code == 404 and "no available did" in str(exc).lower():
+            raise HTTPException(status_code=409, detail="No free DID available") from exc
+        raise HTTPException(status_code=exc.status_code, detail=f"Piper provisioning failed: {exc}") from exc
 
 
 # ---------- 3. Serve Embeddable Widget Script ----------

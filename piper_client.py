@@ -27,6 +27,15 @@ def build_workflow_id(agency_id: str) -> str:
     return f"AGENCY_{slug}_{digest}"
 
 
+def select_pool_did(dids: list[dict], did_pool: list[str]) -> dict | None:
+    records = {item.get("didNumber"): item for item in dids}
+    ordered = [records[number] for number in did_pool if number in records]
+    return next((item for item in ordered if item.get("isAvailable")), None) or (
+        min(ordered, key=lambda item: (item.get("assignment") or {}).get("assignedAt") or "")
+        if ordered else None
+    )
+
+
 def build_flow_payload(
     *,
     workflow_id: str,
@@ -35,7 +44,7 @@ def build_flow_payload(
     first_turn_message: str,
     voice_model: str,
     voice_name: str,
-    voice_pace: float = 1.0,
+    voice_pace: float = 1.3,
 ) -> dict:
     return {
         "nodes": [
@@ -131,12 +140,16 @@ class PiperClient:
     def update_blueprint(self, blueprint_id: str, payload: dict) -> dict:
         return self._request("PUT", f"/api/blueprints/{blueprint_id}", payload=payload)["workflow"]
 
-    def assign_random_did(self, *, company_id: str, blueprint_id: str, workflow_id: str) -> dict:
+    def list_dids(self) -> list[dict]:
+        return self._request("GET", "/api/dids", admin=True).get("dids", [])
+
+    def assign_did(self, *, company_id: str, blueprint_id: str, workflow_id: str, did_number: str) -> dict:
         result = self._request(
             "POST",
             f"/api/companies/{company_id}/dids/assign",
             payload={
                 "adminEmailAddress": self.admin_email,
+                "didNumber": did_number,
                 "blueprintId": blueprint_id,
                 "workflowId": workflow_id,
                 "assignmentMode": "company_default",
@@ -144,6 +157,41 @@ class PiperClient:
             admin=True,
         )
         return result["assignment"]
+
+    def sync_did_macro(self, did_number: str) -> None:
+        self._request("POST", f"/api/dids/{did_number}/sync-macro", payload={}, admin=True)
+
+    def release_did(self, *, company_id: str, did_number: str) -> None:
+        self._request(
+            "POST",
+            f"/api/companies/{company_id}/dids/release",
+            payload={"adminEmailAddress": self.admin_email, "didNumber": did_number},
+            admin=True,
+        )
+
+    def clear_blueprint_did(self, *, company_id: str, blueprint_id: str) -> None:
+        workflow = next(
+            (item for item in self.list_blueprints(company_id) if item.get("blueprintId") == blueprint_id),
+            None,
+        )
+        if not workflow:
+            return
+        self.update_blueprint(
+            blueprint_id,
+            {
+                "companyId": company_id,
+                "workflowName": workflow["workflowName"],
+                "preferredDidNumber": None,
+                "callbackWebhookUrl": workflow.get("callbackWebhookUrl"),
+                "callbackPayloadFormat": workflow.get("callbackPayloadFormat", "workflow"),
+                "callbackAuthMethod": workflow.get("callbackAuthMethod", "none"),
+                "callbackAuthConfig": workflow.get("callbackAuthConfig"),
+                "voiceProvider": workflow.get("voiceProvider", "icallmate"),
+                "voiceModel": workflow.get("voiceModel", "sarvam"),
+                "flowPayload": workflow["flowPayload"],
+                "capturedFieldsConfig": workflow.get("capturedFieldsConfig", []),
+            },
+        )
 
     def provision(
         self,
@@ -156,7 +204,8 @@ class PiperClient:
         first_turn_message: str,
         voice_model: str,
         voice_name: str,
-        voice_pace: float = 1.0,
+        did_pool: list[str],
+        voice_pace: float = 1.3,
     ) -> dict:
         workflow_id = build_workflow_id(agency_id)
         company = next(
@@ -208,6 +257,23 @@ class PiperClient:
             None,
         )
         did_number = (workflow or {}).get("preferredDidNumber") or company.get("assignedDidNumber")
+        if did_number not in did_pool:
+            if company.get("assignedDidNumber"):
+                self.release_did(company_id=company_id, did_number=company["assignedDidNumber"])
+            did_number = None
+
+        if not did_number:
+            selected_did = select_pool_did(self.list_dids(), did_pool)
+            if not selected_did:
+                raise PiperError("No available inbound iCallMate DID", 404)
+            did_number = selected_did["didNumber"]
+            assignment = selected_did.get("assignment") or {}
+            if selected_did.get("isAssigned") and assignment.get("companyId") != company_id:
+                self.clear_blueprint_did(
+                    company_id=assignment["companyId"],
+                    blueprint_id=assignment.get("blueprintId"),
+                )
+                self.release_did(company_id=assignment["companyId"], did_number=did_number)
 
         if workflow:
             workflow = self.update_blueprint(
@@ -215,21 +281,20 @@ class PiperClient:
                 {**common_payload, "preferredDidNumber": did_number},
             )
         else:
-            workflow = self.create_blueprint({**common_payload, "preferredDidNumber": None})
+            workflow = self.create_blueprint({**common_payload, "preferredDidNumber": did_number})
 
-        if not did_number:
-            assignment = self.assign_random_did(
+        if company.get("assignedDidNumber") != did_number:
+            assignment = self.assign_did(
                 company_id=company_id,
                 blueprint_id=workflow["blueprintId"],
                 workflow_id=workflow_id,
+                did_number=did_number,
             )
-            did_number = assignment.get("didNumber")
-            if not did_number:
+            assigned_did = assignment.get("didNumber")
+            if assigned_did != did_number:
                 raise PiperError("Piper assigned no DID", 502)
-            workflow = self.update_blueprint(
-                workflow["blueprintId"],
-                {**common_payload, "preferredDidNumber": did_number},
-            )
+
+        self.sync_did_macro(did_number)
 
         return {
             "status": "active",
