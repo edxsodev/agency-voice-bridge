@@ -84,8 +84,8 @@ class ProvisioningTests(unittest.TestCase):
             agency_name="Acme",
             prompt="Brand persona prompt",
             first_turn_message="Hello",
-            voice_model="sarvam",
-            voice_name="neha",
+            voice_model="gemini_live",
+            voice_name="Sulafat",
         )
         self.assertEqual(flow["nodes"][1]["data"]["voicePace"], 1.3)
 

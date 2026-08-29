@@ -171,8 +171,8 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
             callback_url=None,
             callback_bearer_token=None,
             first_turn_message=first_turn_message,
-            voice_model="sarvam",
-            voice_name="neha",
+            voice_model="gemini_live",
+            voice_name="Sulafat",
             voice_pace=1.3,
             did_pool=[item["did"] for item in DEFAULT_DID_POOL],
         )

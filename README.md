@@ -121,7 +121,7 @@ Automatically registers a brand persona, creates a workflow blueprint, and assig
 }
 ```
 
-The bridge generates and stores the workflow prompt from these inputs, configures Gemini as the LLM, uses Sarvam Neha at pace 1.3, assigns one DID from the dedicated pool, and returns that DID.
+The bridge generates and stores the workflow prompt from these inputs, configures Gemini Live with Sulafat as the default voice, assigns one DID from the dedicated pool, and returns that DID.
 
 #### Response (200 OK)
 ```json
