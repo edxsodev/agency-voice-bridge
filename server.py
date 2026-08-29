@@ -14,7 +14,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
-from typing import Any, Optional
+from typing import Any
 
 from config import (
     BRIDGE_PORT,
@@ -44,17 +44,11 @@ app.add_middleware(
 
 class ProvisionVoiceAgentRequest(BaseModel):
     agency_id: str
-    agency_name: Optional[str] = None
-    website: Optional[str] = None
-    kyc: Optional[dict[str, Any]] = None
-    prompt_text: Optional[str] = None
-    call_bot_prompt: Optional[str] = None
-    callback_url: Optional[str] = None
-    callback_bearer_token: Optional[str] = None
-    first_turn_message: Optional[str] = None
-    voice_model: str = "sarvam"
-    voice_name: str = "neha"
-    voice_pace: float = 1.3
+    knowledge_base: dict[str, Any]
+    kyc: dict[str, Any]
+    location: str
+    workflow: str
+    workflow_type: str
 
 
 class ProvisionVoiceAgentResponse(BaseModel):
@@ -143,22 +137,27 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
     Uses existing Piper APIs to create/update workflow and assign a DID.
     """
     agency_id = req.agency_id.strip()
-    agency_name = (req.agency_name or (req.kyc or {}).get("company_name") or (req.kyc or {}).get("name") or "").strip()
-    prompt = (req.prompt_text or req.call_bot_prompt or "").strip()
+    agency_name = str(req.kyc.get("company_name") or req.kyc.get("name") or agency_id).strip()
     if not agency_id or len(agency_id) > 128:
         raise HTTPException(status_code=400, detail="agency_id must be 1-128 characters")
     if not agency_name or len(agency_name) > 200:
         raise HTTPException(status_code=400, detail="agency_name must be 1-200 characters")
-    if not prompt and req.kyc:
-        prompt = build_kyc_prompt(agency_name=agency_name, kyc=req.kyc)
+    if not req.knowledge_base:
+        raise HTTPException(status_code=400, detail="knowledge_base is required")
+    if not req.kyc:
+        raise HTTPException(status_code=400, detail="kyc is required")
+    prompt = build_kyc_prompt(
+        agency_name=agency_name,
+        knowledge_base=req.knowledge_base,
+        kyc=req.kyc,
+        location=req.location.strip(),
+        workflow=req.workflow.strip(),
+        workflow_type=req.workflow_type.strip(),
+    )
     if len(prompt) < 20 or len(prompt) > 100000:
-        raise HTTPException(status_code=400, detail="prompt_text must be 20-100000 characters")
-    if req.callback_url and not req.callback_url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="callback_url must use https")
+        raise HTTPException(status_code=400, detail="Generated prompt must be 20-100000 characters")
 
-    first_turn_message = (req.first_turn_message or "").strip()
-    if not first_turn_message:
-        first_turn_message = f"Hello! Thank you for calling {agency_name}. How may I help you today?"
+    first_turn_message = f"Hello! Thank you for calling {agency_name}. How may I help you today?"
 
     if not PIPER_ADMIN_EMAIL:
         raise HTTPException(status_code=503, detail="Piper provisioning is not configured")
@@ -169,14 +168,14 @@ def provision_voice_agent(req: ProvisionVoiceAgentRequest):
             agency_id=agency_id,
             agency_name=agency_name,
             prompt=prompt,
-            callback_url=req.callback_url,
-            callback_bearer_token=req.callback_bearer_token,
+            callback_url=None,
+            callback_bearer_token=None,
             first_turn_message=first_turn_message,
-            voice_model=req.voice_model,
-                voice_name=req.voice_name,
-                voice_pace=req.voice_pace,
-                did_pool=[item["did"] for item in DEFAULT_DID_POOL],
-            )
+            voice_model="sarvam",
+            voice_name="neha",
+            voice_pace=1.3,
+            did_pool=[item["did"] for item in DEFAULT_DID_POOL],
+        )
     except PiperError as exc:
         if exc.status_code == 404 and "no available did" in str(exc).lower():
             raise HTTPException(status_code=409, detail="No free DID available") from exc

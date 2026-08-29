@@ -16,17 +16,37 @@ DEFAULT_CAPTURED_FIELDS = [
 ]
 
 
-def build_kyc_prompt(*, agency_name: str, kyc: dict) -> str:
-    details = json.dumps(kyc, ensure_ascii=False, indent=2, sort_keys=True)
+def build_kyc_prompt(
+    *,
+    agency_name: str,
+    kyc: dict,
+    knowledge_base: dict,
+    location: str,
+    workflow: str,
+    workflow_type: str,
+) -> str:
+    details = json.dumps(
+        {
+            "knowledge_base": knowledge_base,
+            "kyc": kyc,
+            "location": location,
+            "workflow": workflow,
+            "workflow_type": workflow_type,
+        },
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
     return f"""You are the inbound voice receptionist for {agency_name}.
 
-Use the following company KYC as the authoritative business context:
+Use the following agency configuration as the authoritative business context:
 {details}
 
 Answer callers professionally and concisely. Collect their name, phone number,
 requirements, location, budget, and preferred callback time when relevant. Use
-only the supplied company context; never invent services, prices, availability,
-addresses, or policies. If the KYC does not answer a question, offer a callback.
+only the supplied context; never invent services, prices, availability, addresses,
+or policies. Follow the supplied workflow and workflow type. If the context does
+not answer a question, offer a callback.
 """.strip()
 
 

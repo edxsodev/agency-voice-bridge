@@ -105,16 +105,23 @@ Automatically registers a brand persona, creates a workflow blueprint, and assig
 #### Request Payload
 ```json
 {
-  "agency_id": "1",
-  "agency_name": "Realty Texas",
-  "website": "https://realtytexas.com",
-  "call_bot_prompt": "You are Riley, the professional AI receptionist for Realty Texas. You help clients with property buying, selling, and leasing in Austin and Round Rock.",
-  "callback_url": "https://sankalp-app.com/api/leads",
-  "first_turn_message": "Hello! Thank you for calling Realty Texas. How may I help you today?",
-  "voice_model": "gemini_live",
-  "voice_name": "Aoede"
+  "agency_id": "sankalp-test-001",
+  "knowledge_base": {
+    "a": "Services and business information",
+    "b": "FAQs and policies",
+    "c": "Products, offers, and supporting content"
+  },
+  "kyc": {
+    "company_name": "Sankalp Test Agency",
+    "phone": "+91 8037259676"
+  },
+  "location": "Bengaluru, Karnataka",
+  "workflow": "Answer inbound enquiries and capture callback details",
+  "workflow_type": "inbound_reception"
 }
 ```
+
+The bridge generates and stores the workflow prompt from these inputs, configures Gemini as the LLM, uses Sarvam Neha at pace 1.3, assigns one DID from the dedicated pool, and returns that DID.
 
 #### Response (200 OK)
 ```json

@@ -93,9 +93,15 @@ class ProvisioningTests(unittest.TestCase):
         prompt = build_kyc_prompt(
             agency_name="Acme Realty",
             kyc={"service_area": "Austin", "phone": "+1 555 0100"},
+            knowledge_base={"a": "Residential sales", "b": "Buyer support", "c": "Local listings"},
+            location="Austin, TX",
+            workflow="Answer inbound property inquiries",
+            workflow_type="inbound_reception",
         )
         self.assertIn("Acme Realty", prompt)
         self.assertIn("Austin", prompt)
+        self.assertIn("Residential sales", prompt)
+        self.assertIn("inbound_reception", prompt)
 
     def test_repeat_provision_reuses_workflow_and_did(self):
         client = FakePiperClient()
