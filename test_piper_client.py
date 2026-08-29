@@ -102,6 +102,8 @@ class ProvisioningTests(unittest.TestCase):
         self.assertIn("Austin", prompt)
         self.assertIn("Residential sales", prompt)
         self.assertIn("inbound_reception", prompt)
+        self.assertIn("Stay fully in English", prompt)
+        self.assertIn("Devanagari", prompt)
 
     def test_repeat_provision_reuses_workflow_and_did(self):
         client = FakePiperClient()
